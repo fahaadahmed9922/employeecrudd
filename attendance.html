@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Attendance Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #2d3748;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            color: #4a5568;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .icon {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        #reader {
+            margin: 1.5rem auto;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            max-width: 280px;
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+
+        #uploadButton {
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        #uploadButton:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        #uploadButton:active {
+            transform: translateY(0);
+        }
+
+        #status {
+            padding: 1rem;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            min-height: 3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            opacity: 0;
+        }
+
+        #status.show {
+            opacity: 1;
+        }
+
+        #status.success {
+            background: linear-gradient(135deg, #48bb78, #38a169);
+            color: white;
+        }
+
+        #status.error {
+            background: linear-gradient(135deg, #f56565, #e53e3e);
+            color: white;
+        }
+
+        #status.info {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            color: white;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 1.5rem;
+                margin: 1rem;
+            }
+            
+            h1 {
+                font-size: 1.3rem;
+            }
+            
+            #reader {
+                max-width: 240px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <svg class="icon" viewBox="0 0 24 24">
+                <path d="M3 11h8V3H3v8zm2-6h4v4H5V5zm8-2v8h8V3h-8zm6 6h-4V5h4v4zM3 21h8v-8H3v8zm2-6h4v4H5v-4zm13-2h2v2h-2v-2zm0 4h2v2h-2v-2zm-2-2h2v2h-2v-2zm4 0h2v2h-2v-2zm-2 4h2v2h-2v-2z"/>
+            </svg>
+            QR Scanner
+        </h1>
+
+        <div id="reader"></div>
+
+        <div class="button-group">
+            <input type="file" id="fileInput" accept="image/*" style="display:none;">
+            <button id="uploadButton">
+                <svg class="icon" viewBox="0 0 24 24" style="width: 18px; height: 18px;">
+                    <path fill="currentColor" d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                </svg>
+                Scan from Image
+            </button>
+        </div>
+
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const html5QrCode = new Html5Qrcode("reader");
+        const statusEl = document.getElementById('status');
+
+        function showStatus(message, type = 'info') {
+            statusEl.className = `show ${type}`;
+            statusEl.textContent = message;
+            
+            if (type === 'success' || type === 'error') {
+                setTimeout(() => {
+                    statusEl.classList.remove('show');
+                }, 5000);
+            }
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            showStatus('Processing attendance...', 'info');
+            
+            fetch('/mark_attendance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employee_id: decodedText })
+            })
+            .then(response => response.json())
+            .then(data => {
+                showStatus(data.message, 'success');
+            })
+            .catch(err => {
+                showStatus('Failed to mark attendance', 'error');
+                console.error('Error:', err);
+            });
+        }
+
+        function startCamera() {
+            showStatus('Starting camera...', 'info');
+            
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    const cameraId = devices[0].id;
+                    html5QrCode.start(
+                        cameraId,
+                        { fps: 10, qrbox: { width: 220, height: 220 } },
+                        onScanSuccess
+                    ).then(() => {
+                        showStatus('Camera ready - Point at QR code', 'info');
+                    }).catch(err => {
+                        showStatus('Camera error', 'error');
+                        console.error('Camera start error:', err);
+                    });
+                } else {
+                    showStatus('No camera found', 'error');
+                }
+            }).catch(err => {
+                showStatus('Camera access denied', 'error');
+                console.error('Camera access error:', err);
+            });
+        }
+
+        document.getElementById('uploadButton').addEventListener('click', function() {
+            document.getElementById('fileInput').click();
+        });
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            if (e.target.files.length === 0) {
+                showStatus('No file selected', 'error');
+                return;
+            }
+            
+            const file = e.target.files[0];
+            showStatus('Scanning image...', 'info');
+            
+            html5QrCode.stop().then(() => {
+                html5QrCode.scanFile(file, true)
+                    .then(decodedText => {
+                        onScanSuccess(decodedText);
+                        setTimeout(() => startCamera(), 1000);
+                    })
+                    .catch(err => {
+                        showStatus('No QR code found in image', 'error');
+                        setTimeout(() => startCamera(), 1000);
+                        console.error('Image scan error:', err);
+                    });
+            }).catch(err => {
+                console.error('Stop error:', err);
+                showStatus('Camera error', 'error');
+            });
+        });
+
+        // Initialize
+        startCamera();
+    </script>
+</body>
+</html>
